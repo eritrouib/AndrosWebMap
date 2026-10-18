@@ -1,0 +1,6 @@
+# raw project data stays local until the providers agree to publish it
+data/*
+!data/README.md
+__pycache__/
+*.pyc
+.DS_Store

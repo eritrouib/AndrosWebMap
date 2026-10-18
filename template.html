@@ -1,0 +1,823 @@
+<title>Ψηφιακός Χάρτης Άνδρου</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Commissioner:wght@400;500;600&family=Noto+Serif+Display:ital,wght@0,600;1,500&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/*__LEAFLET_CSS__*/
+</style>
+<style>
+/* Layout: full-bleed map of the island; one floating control sheet (left on desktop, bottom sheet on phones),
+   a coordinate/elevation readout bottom-right, and an elevation-profile drawer that slides up when used. */
+:root{
+  --sea:#cddfe3; --paper:#f6f8f7; --paper-2:#eaf0ef; --ink:#1c2a31; --muted:#5a6a71; --line:#d3dcdc;
+  --accent:#17647f; --accent-ink:#ffffff; --chart-fill:rgba(23,100,127,.16); --shadow:0 8px 28px rgba(18,40,48,.18);
+  --relief-filter:none; --danger:#a83a2a;
+  --f-display:"Noto Serif Display","Georgia",serif; --f-body:"Commissioner","Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --sea:#11222a; --paper:#162127; --paper-2:#1d2b32; --ink:#e3eaeb; --muted:#97a9ae; --line:#2a3a41;
+  --accent:#62b4d2; --accent-ink:#0d1a20; --chart-fill:rgba(98,180,210,.18); --shadow:0 8px 28px rgba(0,0,0,.45);
+  --relief-filter:brightness(.82) saturate(.9); --danger:#ef8a74; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --sea:#11222a; --paper:#162127; --paper-2:#1d2b32; --ink:#e3eaeb; --muted:#97a9ae; --line:#2a3a41;
+  --accent:#62b4d2; --accent-ink:#0d1a20; --chart-fill:rgba(98,180,210,.18); --shadow:0 8px 28px rgba(0,0,0,.45);
+  --relief-filter:brightness(.82) saturate(.9); --danger:#ef8a74; color-scheme:dark}
+
+html,body{height:100%}
+body{background:var(--sea);color:var(--ink);font-family:var(--f-body);font-size:14px;overflow:hidden}
+#map{position:absolute;inset:0;background:var(--sea)}
+.leaflet-container{font-family:var(--f-body);background:var(--sea)}
+.relief{filter:var(--relief-filter)}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------- side sheet ---------- */
+.sheet{position:absolute;z-index:1000;top:calc(12px + env(safe-area-inset-top,0px));left:calc(12px + env(safe-area-inset-left,0px));
+  width:328px;max-height:calc(100% - 24px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));
+  display:flex;flex-direction:column;background:var(--paper);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden}
+.sheet-head{padding:14px 16px 10px;display:grid;gap:10px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.brand h1{margin:0;font-family:var(--f-display);font-weight:600;font-size:30px;line-height:1;letter-spacing:.2px}
+.brand h1 i{font-weight:500;color:var(--accent)}
+.brand p{margin:4px 0 0;color:var(--muted);font-size:12px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;flex:none}
+.seg button{border:0;background:transparent;padding:4px 8px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.search{position:relative}
+.search input{width:100%;box-sizing:border-box;padding:9px 12px 9px 34px;border:1px solid var(--line);border-radius:8px;background:var(--paper-2)}
+.search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:16px;height:16px;stroke:var(--muted);fill:none;stroke-width:2}
+.results{position:absolute;left:0;right:0;top:calc(100% + 4px);background:var(--paper);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);
+  list-style:none;margin:0;padding:4px;max-height:280px;overflow:auto;z-index:5}
+.results li button{width:100%;text-align:left;border:0;background:none;padding:7px 8px;border-radius:6px;display:flex;gap:8px;align-items:center;cursor:pointer}
+.results li button:hover,.results li button.on{background:var(--paper-2)}
+.results small{color:var(--muted);margin-left:auto;font-size:11px;white-space:nowrap}
+.results .empty{padding:8px;color:var(--muted)}
+.mobile-toggle{display:none}
+
+.sheet-body{overflow:auto;padding:4px 0 8px;flex:1;min-height:0}
+.sec{padding:10px 16px 6px}
+.sec h2{margin:0 0 6px;font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.base{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.base label{display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;cursor:pointer;font-size:13px}
+.base label:has(input:checked){border-color:var(--accent);background:var(--paper-2)}
+.base input{accent-color:var(--accent);margin:0}
+.slider{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:12px;color:var(--muted)}
+.slider input{flex:1;accent-color:var(--accent)}
+.grp{margin:4px 0 2px;font-size:12px;font-weight:600}
+.row{display:grid;grid-template-columns:auto 20px 1fr auto;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:13px}
+.row input{accent-color:var(--accent);margin:0}
+.row .n{font-family:var(--f-mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.row.zoomhidden .lbl-txt{color:var(--muted)}
+.row .hint{display:none;font-size:11px;color:var(--muted)}
+.row.zoomhidden .hint{display:inline}
+.sw{width:20px;min-height:14px;display:grid;place-items:center}
+.sw i{display:block;border-radius:50%;border:1.5px solid #fff;box-shadow:0 0 0 .5px rgba(0,0,0,.35)}
+.sw b{display:block;width:20px}
+.tools{display:grid;gap:6px}
+.btn{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--paper);cursor:pointer;text-align:left;font-size:13px}
+.btn:hover{background:var(--paper-2)}
+.btn.primary[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn svg{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.goto{display:flex;gap:6px}
+.goto input{flex:1;min-width:0;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:var(--paper-2);font-family:var(--f-mono);font-size:12px}
+.goto button{flex:none}
+.note{font-size:11px;color:var(--muted);margin:4px 0 0;line-height:1.45}
+.foot{border-top:1px solid var(--line);padding:10px 16px 12px;font-size:11px;color:var(--muted);line-height:1.5}
+.foot strong{color:var(--ink);font-weight:600}
+.tag{display:inline-block;padding:1px 6px;border:1px solid var(--accent);color:var(--accent);border-radius:4px;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-right:4px}
+
+/* ---------- readout ---------- */
+.readout{position:absolute;z-index:900;right:calc(10px + env(safe-area-inset-right,0px));bottom:calc(26px + env(safe-area-inset-bottom,0px));
+  background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-family:var(--f-mono);font-size:11px;
+  display:grid;grid-template-columns:auto auto;gap:2px 10px;box-shadow:var(--shadow);font-variant-numeric:tabular-nums}
+.readout span:nth-child(odd){color:var(--muted);font-family:var(--f-body)}
+.leaflet-control-scale{margin-right:calc(10px + env(safe-area-inset-right,0px))!important}
+.leaflet-control-scale-line{background:var(--paper);color:var(--ink);border-color:var(--ink);font-family:var(--f-mono);font-size:10px}
+.leaflet-control-zoom a{background:var(--paper)!important;color:var(--ink)!important;border-color:var(--line)!important}
+.leaflet-control-attribution{background:color-mix(in srgb,var(--paper) 85%,transparent)!important;color:var(--muted)!important;font-size:10px}
+.leaflet-control-attribution a{color:var(--accent)!important}
+
+/* ---------- symbols ---------- */
+.mk-wrap{background:none;border:0}
+.mk{display:grid;place-items:center;width:var(--s);height:var(--s);box-sizing:border-box;color:#fff}
+.mk.badge{background:var(--c);border:1.5px solid #fff;border-radius:28%;box-shadow:0 1px 3px rgba(10,25,30,.45)}
+.mk.badge svg{width:72%;height:72%}
+.mk.plain{color:var(--c);filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff) drop-shadow(0 0 .5px #fff)}
+.mk.plain svg{width:100%;height:100%}
+.mk svg{stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;overflow:visible}
+.leaflet-marker-icon.mk-wrap:hover{z-index:9999!important}
+.sw .mk{--s:16px}
+.z-a .mk{transform:scale(.72)}
+.z-b .mk{transform:scale(.86)}
+.mk{transition:transform .15s}
+/* ---------- labels ---------- */
+.leaflet-tooltip.lbl{background:none;border:0;box-shadow:none;padding:0;color:var(--ink);font-weight:600;font-size:11px;
+  text-shadow:0 0 3px var(--paper),0 0 3px var(--paper),0 0 2px var(--paper);white-space:nowrap}
+.leaflet-tooltip.lbl::before{display:none}
+.leaflet-tooltip.lbl.cap{font-family:var(--f-display);font-size:15px}
+.leaflet-tooltip.lbl.main,.leaflet-tooltip.lbl.top{font-size:12px}
+.leaflet-tooltip.lbl.beach{font-weight:500;font-style:italic;color:#9a5f0c;font-size:10.5px}
+.z-a .lbl.main,.z-a .lbl.minor,.z-a .lbl.beach,.z-b .lbl.minor,.z-b .lbl.beach,.z-c .lbl.beach{display:none}
+.leaflet-tooltip.tip{background:var(--paper);color:var(--ink);border:1px solid var(--line);box-shadow:var(--shadow);font-size:12px}
+
+/* ---------- popups ---------- */
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--paper);color:var(--ink);box-shadow:var(--shadow)}
+.leaflet-popup-content{margin:12px 14px;min-width:210px;font-size:13px;line-height:1.4}
+.leaflet-container a.leaflet-popup-close-button{color:var(--muted)}
+.pp-kind{font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.pp-title{font-family:var(--f-display);font-size:19px;font-weight:600;margin:2px 0 1px;text-wrap:balance}
+.pp-alt{color:var(--muted);font-size:12px}
+.pp-grid{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:8px 0;font-size:12px}
+.pp-grid span:nth-child(odd){color:var(--muted)}
+.pp-grid span:nth-child(even){font-family:var(--f-mono);font-size:11.5px}
+.pp-actions{display:flex;gap:6px;flex-wrap:wrap}
+.pp-actions a,.pp-actions button{font-size:12px;padding:5px 9px;border:1px solid var(--line);border-radius:6px;background:var(--paper-2);color:var(--ink)!important;text-decoration:none;cursor:pointer}
+
+/* ---------- profile drawer ---------- */
+.profile{position:absolute;z-index:1001;left:calc(352px + env(safe-area-inset-left,0px));right:calc(12px + env(safe-area-inset-right,0px));
+  bottom:calc(12px + env(safe-area-inset-bottom,0px));background:var(--paper);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:10px 14px 8px}
+.profile header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.profile h3{margin:0;font-size:13px;font-weight:600}
+.stats{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--f-mono);font-size:12px;font-variant-numeric:tabular-nums}
+.stats span b{font-family:var(--f-body);font-weight:500;color:var(--muted);font-size:11px;margin-right:4px}
+.profile .actions{margin-left:auto;display:flex;gap:6px}
+.profile .actions button{padding:4px 9px;border:1px solid var(--line);border-radius:6px;background:var(--paper-2);cursor:pointer;font-size:12px}
+.chart{width:100%;height:150px;display:block;margin-top:6px}
+.chart text{fill:var(--muted);font-family:var(--f-mono);font-size:10px}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .area{fill:var(--chart-fill)}
+.chart .ln{fill:none;stroke:var(--accent);stroke-width:2}
+.chart .cur{stroke:var(--ink);stroke-dasharray:3 3}
+.profile .hint{font-size:12px;color:var(--muted);margin:6px 0 2px}
+.leaflet-container.drawing,.leaflet-container.drawing .leaflet-interactive{cursor:crosshair!important}
+.drawing .leaflet-marker-pane,.drawing .leaflet-tooltip-pane{pointer-events:none}
+.drawing .leaflet-marker-pane *{pointer-events:none!important}
+
+.toast{position:absolute;z-index:2000;left:50%;transform:translateX(-50%);top:calc(14px + env(safe-area-inset-top,0px));
+  background:var(--ink);color:var(--paper);padding:9px 14px;border-radius:8px;font-size:13px;max-width:min(520px,calc(100% - 32px));box-shadow:var(--shadow)}
+
+/* ---------- phones ---------- */
+@media (max-width: 720px){
+  .sheet{left:0;right:0;top:auto;bottom:0;width:auto;border-radius:14px 14px 0 0;max-height:72%;
+    padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+  .sheet.collapsed .sheet-body,.sheet.collapsed .foot{display:none}
+  .sheet-head{padding:10px 16px 10px}
+  .brand h1{font-size:24px}
+  .mobile-toggle{display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);background:var(--paper-2);border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer}
+  .results{top:auto;bottom:calc(100% + 4px)}
+  .readout{top:calc(10px + env(safe-area-inset-top,0px));bottom:auto;right:calc(10px + env(safe-area-inset-right,0px));font-size:10px}
+  .leaflet-control-zoom{display:none}
+  .leaflet-bottom.leaflet-right{bottom:auto;top:96px}
+  .profile{left:calc(8px + env(safe-area-inset-left,0px));right:calc(8px + env(safe-area-inset-right,0px));bottom:auto;top:calc(80px + env(safe-area-inset-top,0px))}
+  .chart{height:120px}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div id="map" role="application" aria-label="Χάρτης"></div>
+
+<aside class="sheet" id="sheet">
+  <div class="sheet-head">
+    <div class="brand">
+      <div>
+        <h1>Άνδρος <i data-i18n="mapword">χάρτης</i></h1>
+        <p data-i18n="subtitle">Οικισμοί, ακτές, μνημεία, δίκτυα και ανάγλυφο του νησιού</p>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="mobile-toggle" id="mtoggle" aria-expanded="false" data-i18n="layers">Επίπεδα</button>
+        <div class="seg" role="group" aria-label="Language">
+          <button id="lang-el" aria-pressed="true">ΕΛ</button><button id="lang-en" aria-pressed="false">EN</button>
+        </div>
+      </div>
+    </div>
+    <div class="search">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" autocomplete="off" placeholder="Αναζήτηση: χωριό, παραλία, εκκλησία…" aria-label="Αναζήτηση">
+      <ul class="results" id="results" hidden></ul>
+    </div>
+  </div>
+
+  <div class="sheet-body">
+    <section class="sec">
+      <h2 data-i18n="basemap">Υπόβαθρο</h2>
+      <div class="base" id="base"></div>
+      <div class="slider"><span data-i18n="relief">Ανάγλυφο</span><input id="relief-op" type="range" min="0" max="100" value="100" aria-label="Διαφάνεια αναγλύφου"><span id="relief-v" style="font-family:var(--f-mono);width:34px;text-align:right">100%</span></div>
+    </section>
+    <section class="sec" id="layers"></section>
+    <section class="sec">
+      <h2 data-i18n="tools">Εργαλεία</h2>
+      <div class="tools">
+        <button class="btn primary" id="btn-profile" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M3 20 9 9l4 6 3-4 5 9z"/></svg><span data-i18n="profile">Μήκος & προφίλ υψομέτρου διαδρομής</span></button>
+        <button class="btn" id="btn-locate"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg><span data-i18n="locate">Η θέση μου</span></button>
+        <form class="goto" id="goto">
+          <input id="goto-in" placeholder="ΕΓΣΑ87: 577500 4189000  ή  37.84 24.93" aria-label="Συντεταγμένες">
+          <button class="btn" type="submit" data-i18n="go">Μετάβαση</button>
+        </form>
+        <p class="note" data-i18n="gotonote">Δέχεται ΕΓΣΑ87 (X Y) ή γεωγραφικές συντεταγμένες WGS84 (φ λ). Κλικ οπουδήποτε στον χάρτη δίνει υψόμετρο και συντεταγμένες.</p>
+      </div>
+    </section>
+  </div>
+  <div class="foot">
+    <span class="tag" data-i18n="proto">Πρόταση</span><span data-i18n="credit">Δεδομένα: χαρτογραφική εργασία ΕΜΠ, ΔΠΜΣ Γεωπληροφορική (2019) · ΨΜΕ 13 m · ΕΓΣΑ87. Δεν αποτελεί επίσημο χάρτη του Δήμου Άνδρου.</span>
+  </div>
+</aside>
+
+<div class="readout" id="readout" aria-live="off">
+  <span>φ, λ</span><span id="ro-ll">—</span>
+  <span>ΕΓΣΑ87</span><span id="ro-gr">—</span>
+  <span data-i18n="elev">Υψόμ.</span><span id="ro-h">—</span>
+</div>
+
+<section class="profile" id="profile" hidden>
+  <header>
+    <h3 data-i18n="ptitle">Προφίλ διαδρομής</h3>
+    <div class="stats" id="pstats"></div>
+    <div class="actions"><button id="p-undo" data-i18n="undo">Αναίρεση</button><button id="p-clear" data-i18n="clear">Καθαρισμός</button><button id="p-close" data-i18n="close">Κλείσιμο</button></div>
+  </header>
+  <p class="hint" id="phint" data-i18n="phint">Κάντε κλικ στον χάρτη για να σημειώσετε σημεία της διαδρομής.</p>
+  <svg class="chart" id="chart" role="img" aria-label="Προφίλ υψομέτρου"></svg>
+</section>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/proj4@2.9.2/dist/proj4.js"></script>
+<script>
+(() => {
+const DATA = /*__LAYERS__*/null;
+const RELIEF_BOUNDS = /*__RELIEF_BOUNDS__*/null;
+const GRID = /*__GRID__*/null;
+const RELIEF_SRC = "data:image/webp;base64,__RELIEF_B64__";
+
+/* ---------------- i18n ---------------- */
+const I18N = {
+ el:{mapword:"χάρτης",subtitle:"Οικισμοί, ακτές, μνημεία, δίκτυα και ανάγλυφο του νησιού",layers:"Επίπεδα",basemap:"Υπόβαθρο",relief:"Ανάγλυφο",
+  tools:"Εργαλεία",profile:"Μήκος & προφίλ υψομέτρου διαδρομής",locate:"Η θέση μου",go:"Μετάβαση",
+  gotonote:"Δέχεται ΕΓΣΑ87 (X Y) ή γεωγραφικές συντεταγμένες WGS84 (φ λ). Κλικ οπουδήποτε στον χάρτη δίνει υψόμετρο και συντεταγμένες.",
+  proto:"Πρόταση",credit:"Δεδομένα: χαρτογραφική εργασία ΕΜΠ, ΔΠΜΣ Γεωπληροφορική (2019) · ΨΜΕ 13 m · ΕΓΣΑ87. Δεν αποτελεί επίσημο χάρτη του Δήμου Άνδρου.",
+  elev:"Υψόμ.",ptitle:"Προφίλ διαδρομής",undo:"Αναίρεση",clear:"Καθαρισμός",close:"Κλείσιμο",
+  phint:"Κάντε κλικ στον χάρτη για να σημειώσετε σημεία της διαδρομής.",search:"Αναζήτηση: χωριό, παραλία, εκκλησία…",
+  noresults:"Δεν βρέθηκε αποτέλεσμα",fromzoom:"από ζουμ",directions:"Οδηγίες",copy:"Αντιγραφή συντ.",copied:"Αντιγράφηκε",
+  len:"Μήκος",up:"Άνοδος",down:"Κάθοδος",min:"Ελάχ.",max:"Μέγ.",
+  b_relief:"Ανάγλυφο",b_osm:"OpenStreetMap",b_sat:"Δορυφορική",b_topo:"OpenTopoMap",
+  tile_err:"Τα online υπόβαθρα δεν φορτώνουν σε αυτή την προβολή. Λειτουργούν όταν ο χάρτης φιλοξενείται στον ιστότοπο του Δήμου. Το ανάγλυφο δουλεύει παντού.",
+  geo_err:"Η θέση σας δεν είναι διαθέσιμη εδώ. Στον ιστότοπο του Δήμου (https) ο browser θα ζητήσει άδεια.",
+  bad_coords:"Δεν αναγνωρίστηκαν συντεταγμένες. Παράδειγμα: 577500 4189000 ή 37.84 24.93",
+  point:"Σημείο",you:"Η θέση σας",
+  g_places:"Οικισμοί & εξυπηρέτηση",g_culture:"Θρησκευτικά & πολιτιστικά",g_coast:"Ακτή & θάλασσα",g_net:"Δίκτυα",g_terrain:"Ανάγλυφο",
+  villages:"Οικισμοί",ports:"Λιμάνια",banks:"Τράπεζες / ΑΤΜ",camping:"Κάμπινγκ",factories:"Εργοστάσια",
+  monasteries:"Μονές",churches:"Εκκλησίες",monuments:"Μνημεία & αρχ. χώροι",caves:"Σπήλαια",
+  beaches:"Παραλίες",lighthouses:"Φάροι",wrecks:"Ναυάγια",coast:"Ακτογραμμή",
+  roads:"Οδικό δίκτυο",rivers:"Ποτάμια & ρέματα (κύρια)",streams:"Υδρογραφικό δίκτυο",
+  contours:"Ισοϋψείς 20 m",peaks:"Υψομετρικά σημεία",
+  road1:"Επαρχιακή οδός",road2:"Δημοτική οδός",road3:"Αγροτική οδός",
+  k_village:"Οικισμός",k_capital:"Πρωτεύουσα",k_beach:"Παραλία",k_church:"Εκκλησία",k_monastery:"Μονή",k_monument:"Μνημείο / αρχ. χώρος",
+  k_port:"Λιμάνι",k_bank:"Τράπεζα",k_lighthouse:"Φάρος",k_wreck:"Ναυάγιο",k_cave:"Σπήλαιο",k_camping:"Κάμπινγκ",k_factory:"Εργοστάσιο",
+  k_peak:"Υψομετρικό σημείο",k_river:"Υδατόρεμα",near:"κοντά σε",road:"Δρόμος",addr:"Διεύθυνση",
+  phone:"Τηλέφωνο",hours:"Ωράριο",ref:"Κωδικός",k_trail:"Μονοπάτι",trailprof:"Προφίλ υψομέτρου",trails:"Μονοπάτια (σηματοδοτημένα)",paths:"Λοιπά μονοπάτια",
+  g_health:"Υγεία & ασφάλεια",g_public:"Δημόσιες υπηρεσίες",g_move:"Μετακίνηση",g_nature:"Νερό, θέα & αξιοθέατα",
+  osm_hospital:"Νοσοκομείο / Κέντρο Υγείας",osm_clinic:"Ιατρεία",osm_pharmacy:"Φαρμακεία",osm_police:"Αστυνομία",osm_fire:"Πυροσβεστική",
+  osm_townhall:"Δημαρχείο / υπηρεσίες Δήμου",osm_post:"Ταχυδρομεία",osm_school:"Σχολεία",osm_civic:"Βιβλιοθήκες & πολιτιστικά κέντρα",osm_atm:"ΑΤΜ (OSM)",
+  osm_ferry:"Λιμάνια & μαρίνες",osm_bus:"Στάσεις λεωφορείου",osm_fuel:"Πρατήρια καυσίμων",osm_parking:"Στάθμευση",osm_toilets:"Τουαλέτες",
+  osm_water:"Πηγές & βρύσες",osm_viewpoint:"Θέες",osm_museum:"Μουσεία",osm_archaeo:"Αρχαιολογικοί χώροι",osm_castle:"Κάστρα & πύργοι",osm_info:"Πληροφορίες",
+  o_hospital:"Νοσοκομείο / Κέντρο Υγείας",o_clinic:"Ιατρείο",o_pharmacy:"Φαρμακείο",o_police:"Αστυνομία",o_fire:"Πυροσβεστική",o_townhall:"Δημοτική υπηρεσία",
+  o_post:"Ταχυδρομείο",o_school:"Σχολείο",o_civic:"Βιβλιοθήκη / πολιτιστικό κέντρο",o_atm:"ΑΤΜ",o_ferry:"Λιμάνι / μαρίνα",o_bus:"Στάση λεωφορείου",
+  o_fuel:"Πρατήριο καυσίμων",o_parking:"Στάθμευση",o_toilets:"Τουαλέτες",o_water:"Πηγή / βρύση",o_viewpoint:"Θέα",o_museum:"Μουσείο",
+  o_archaeo:"Αρχαιολογικός χώρος",o_castle:"Κάστρο / πύργος",o_info:"Πληροφορίες"},
+ en:{mapword:"map",subtitle:"Villages, beaches, monuments, networks and terrain of the island",layers:"Layers",basemap:"Basemap",relief:"Relief",
+  tools:"Tools",profile:"Route length & elevation profile",locate:"My location",go:"Go",
+  gotonote:"Accepts Greek Grid ΕΓΣΑ87 (X Y) or WGS84 latitude longitude. Click anywhere on the map for elevation and coordinates.",
+  proto:"Prototype",credit:"Data: NTUA cartography project, MSc Geoinformatics (2019) · 13 m DTM · Greek Grid. Not an official Municipality of Andros map.",
+  elev:"Elev.",ptitle:"Route profile",undo:"Undo",clear:"Clear",close:"Close",
+  phint:"Click on the map to add route points.",search:"Search: village, beach, church…",
+  noresults:"No results",fromzoom:"from zoom",directions:"Directions",copy:"Copy coords",copied:"Copied",
+  len:"Length",up:"Ascent",down:"Descent",min:"Min",max:"Max",
+  b_relief:"Relief",b_osm:"OpenStreetMap",b_sat:"Satellite",b_topo:"OpenTopoMap",
+  tile_err:"Online basemaps can't load in this preview. They work once the map is hosted on the Municipality's website. The relief basemap works everywhere.",
+  geo_err:"Your location isn't available here. On the Municipality's (https) site the browser will ask for permission.",
+  bad_coords:"Coordinates not recognised. Example: 577500 4189000 or 37.84 24.93",
+  point:"Point",you:"Your location",
+  g_places:"Settlements & services",g_culture:"Religious & cultural",g_coast:"Coast & sea",g_net:"Networks",g_terrain:"Terrain",
+  villages:"Villages",ports:"Ports",banks:"Banks / ATMs",camping:"Camping",factories:"Factories",
+  monasteries:"Monasteries",churches:"Churches",monuments:"Monuments & sites",caves:"Caves",
+  beaches:"Beaches",lighthouses:"Lighthouses",wrecks:"Shipwrecks",coast:"Coastline",
+  roads:"Road network",rivers:"Main rivers & streams",streams:"Stream network",
+  contours:"Contours 20 m",peaks:"Spot heights",
+  road1:"Provincial road",road2:"Municipal road",road3:"Rural road",
+  k_village:"Village",k_capital:"Island capital",k_beach:"Beach",k_church:"Church",k_monastery:"Monastery",k_monument:"Monument / archaeological site",
+  k_port:"Port",k_bank:"Bank",k_lighthouse:"Lighthouse",k_wreck:"Shipwreck",k_cave:"Cave",k_camping:"Camping",k_factory:"Factory",
+  k_peak:"Spot height",k_river:"Watercourse",near:"near",road:"Road",addr:"Address",
+  phone:"Phone",hours:"Opening hours",ref:"Ref.",k_trail:"Trail",trailprof:"Elevation profile",trails:"Waymarked trails",paths:"Other footpaths",
+  g_health:"Health & safety",g_public:"Public services",g_move:"Getting around",g_nature:"Water, views & sights",
+  osm_hospital:"Hospital / health centre",osm_clinic:"Clinics & doctors",osm_pharmacy:"Pharmacies",osm_police:"Police",osm_fire:"Fire service",
+  osm_townhall:"Town hall / municipal offices",osm_post:"Post offices",osm_school:"Schools",osm_civic:"Libraries & cultural centres",osm_atm:"ATMs (OSM)",
+  osm_ferry:"Ports & marinas",osm_bus:"Bus stops",osm_fuel:"Fuel stations",osm_parking:"Parking",osm_toilets:"Toilets",
+  osm_water:"Springs & fountains",osm_viewpoint:"Viewpoints",osm_museum:"Museums",osm_archaeo:"Archaeological sites",osm_castle:"Castles & towers",osm_info:"Information",
+  o_hospital:"Hospital / health centre",o_clinic:"Clinic",o_pharmacy:"Pharmacy",o_police:"Police",o_fire:"Fire service",o_townhall:"Municipal office",
+  o_post:"Post office",o_school:"School",o_civic:"Library / cultural centre",o_atm:"ATM",o_ferry:"Port / marina",o_bus:"Bus stop",
+  o_fuel:"Fuel station",o_parking:"Parking",o_toilets:"Toilets",o_water:"Spring / fountain",o_viewpoint:"Viewpoint",o_museum:"Museum",
+  o_archaeo:"Archaeological site",o_castle:"Castle / tower",o_info:"Information"}
+};
+let lang = "el";
+try { lang = localStorage.getItem("andros-lang") || "el"; } catch(e){}
+const t = k => (I18N[lang][k] ?? k);
+
+/* ---------------- coordinates ---------------- */
+proj4.defs("EPSG:2100","+proj=tmerc +lat_0=0 +lon_0=24 +k=0.9996 +x_0=500000 +y_0=0 +ellps=GRS80 +towgs84=-199.87,74.79,246.62,0,0,0,0 +units=m +no_defs");
+const toGR = ll => proj4("EPSG:4326","EPSG:2100",[ll.lng, ll.lat]);
+const fromGR = (x,y) => { const p = proj4("EPSG:2100","EPSG:4326",[x,y]); return L.latLng(p[1],p[0]); };
+const fmtLL = ll => `${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
+const fmtGR = ll => { const p = toGR(ll); return `${Math.round(p[0])} ${Math.round(p[1])}`; };
+
+/* ---------------- elevation grid ---------------- */
+const elev = (() => {
+  const bin = atob(GRID.data), buf = new Uint8Array(bin.length);
+  for (let i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i);
+  const a = new Uint16Array(buf.buffer);
+  const {w,n,step,cols,rows} = GRID;
+  const at = (r,c) => a[r*cols+c] / 10;
+  return (lat,lng) => {
+    const x=(lng-w)/step, y=(n-lat)/step;
+    if (x<0||y<0||x>=cols-1||y>=rows-1) return null;
+    const c=Math.floor(x), r=Math.floor(y), fx=x-c, fy=y-r;
+    const v=at(r,c)*(1-fx)*(1-fy)+at(r,c+1)*fx*(1-fy)+at(r+1,c)*(1-fx)*fy+at(r+1,c+1)*fx*fy;
+    return v;
+  };
+})();
+const fmtH = h => (h==null || h<=0.5) ? "—" : `${Math.round(h)} m`;
+
+/* ---------------- map ---------------- */
+const map = L.map("map",{preferCanvas:true,zoomControl:true,minZoom:9,maxZoom:18,attributionControl:true,zoomSnap:.5});
+map.attributionControl.setPrefix(false);
+const islandBounds = L.latLngBounds(RELIEF_BOUNDS);
+map.setMaxBounds(islandBounds.pad(0.6));
+const canvas = L.canvas({padding:.5, tolerance:6});
+
+map.createPane("relief"); map.getPane("relief").style.zIndex=250;
+map.createPane("lines"); map.getPane("lines").style.zIndex=380;
+const relief = L.imageOverlay(RELIEF_SRC, RELIEF_BOUNDS, {pane:"relief",className:"relief",interactive:false,
+  attribution:"Ανάγλυφο: ΨΜΕ 13 m (ΕΓΣΑ87)"}).addTo(map);
+
+const tileDefs = {
+  b_osm:["https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}],
+  b_sat:["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,attribution:"Imagery © Esri"}],
+  b_topo:["https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",{maxZoom:17,attribution:"© OpenTopoMap (CC-BY-SA)"}]
+};
+let tile=null, tileErrShown=false, baseKey="b_relief";
+function setBase(k){
+  baseKey=k;
+  if (tile){ map.removeLayer(tile); tile=null; }
+  if (k!=="b_relief"){
+    tile = L.tileLayer(tileDefs[k][0], tileDefs[k][1]).addTo(map);
+    tile.on("tileerror",()=>{ if(!tileErrShown){ tileErrShown=true; toast(t("tile_err"),7000);} });
+    reliefOp.value = 45; applyReliefOp();
+  } else { reliefOp.value = 100; applyReliefOp(); }
+}
+const reliefOp = document.getElementById("relief-op");
+function applyReliefOp(){ relief.setOpacity(reliefOp.value/100); document.getElementById("relief-v").textContent=reliefOp.value+"%"; }
+reliefOp.addEventListener("input", applyReliefOp);
+
+/* ---------------- symbols ---------------- */
+const G = {
+ house:'<path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9.5h11V10"/><path d="M10.5 19.5V15h3v4.5"/>',
+ cross:'<path d="M12 3v18M7 8.5h10"/>',
+ church:'<path d="M12 2.5v5M9.8 4.6h4.4"/><path d="M8 13a4 4 0 0 1 8 0"/><path d="M5.5 21v-8h13v8z"/><path d="M10.5 21v-4h3v4"/>',
+ temple:'<path d="M3 9 12 4l9 5z"/><path d="M5.5 9.5v8M9.8 9.5v8M14.2 9.5v8M18.5 9.5v8"/><path d="M3 20h18"/>',
+ ruins:'<path d="M3 20h18"/><path d="M6 20V9h3v11"/><path d="M15 20v-6h3v6"/><path d="M5 9h5M14 14h5"/>',
+ castle:'<path d="M5 21V9h2.5V6.5H10V9h4V6.5h2.5V9H19v12z"/><path d="M10 21v-4a2 2 0 0 1 4 0v4"/>',
+ umbrella:'<path d="M3.5 11.5a8.5 8.5 0 0 1 17 0z"/><path d="M12 11.5V19a1.5 1.5 0 0 1-3 0"/>',
+ anchor:'<circle cx="12" cy="5" r="2"/><path d="M12 7v13.5"/><path d="M8.5 10.5h7"/><path d="M4.5 13.5a7.5 7.5 0 0 0 15 0"/>',
+ lighthouse:'<path d="M9.5 8h5l1.5 12.5h-8z"/><path d="M10 3.5h4V8h-4z"/><path d="M9 13.5h6"/><path d="M4 4.5l3 1.5M20 4.5 17 6"/>',
+ wreck:'<path d="M3 15.5h18l-2.5 4h-13z"/><path d="M12 15.5V4l6 8h-6"/>',
+ cave:'<path d="M2.5 20C3 11 7 5.5 12 5.5S21 11 21.5 20"/><path d="M8.5 20c0-4 1.6-7 3.5-7s3.5 3 3.5 7"/>',
+ tent:'<path d="M2.5 20h19"/><path d="M4 20 12 5l8 15"/><path d="M9.5 20 12 14.5l2.5 5.5"/>',
+ factory:'<path d="M3 21V10.5l5 3v-3l5 3V4.5h4.5V21z"/>',
+ euro:'<path d="M17 6.5a6.5 6.5 0 1 0 0 11"/><path d="M4.5 10.5h8M4.5 13.5h8"/>',
+ peak:'<path d="M12 4.5 20.5 19.5h-17z" fill="currentColor"/>',
+ pharmacy:'<path d="M12 4.5v15M4.5 12h15" stroke-width="4"/>',
+ hospital:'<path d="M7.5 5v14M16.5 5v14M7.5 12h9" stroke-width="3"/>',
+ clinic:'<path d="M12 7v10M7 12h10" stroke-width="2.8"/><rect x="3.5" y="3.5" width="17" height="17" rx="4"/>',
+ police:'<path d="M12 3 19 6v5.5c0 4.5-3 7.6-7 9.5-4-1.9-7-5-7-9.5V6z"/>',
+ fire:'<path d="M12 2.5c.8 3.4 5.5 5.4 5.5 11a5.5 5.5 0 0 1-11 0c0-2.8 1.6-4.6 2.8-5.6.2 2.1 1.3 3.2 2.4 3.3-.4-3.4.3-5.8.3-8.7z"/>',
+ school:'<path d="M2 9.5 12 4.5l10 5-10 5z"/><path d="M6 11.5v5c3.5 2.5 8.5 2.5 12 0v-5"/>',
+ civic:'<path d="M4 5.5c3-1.5 5.5-1 8 .5 2.5-1.5 5-2 8-.5v13c-3-1.5-5.5-1-8 .5-2.5-1.5-5-2-8-.5z"/><path d="M12 6v13"/>',
+ post:'<rect x="3" y="6" width="18" height="12.5" rx="1.5"/><path d="m3.5 7 8.5 6.5L20.5 7"/>',
+ townhall:'<path d="M3 21h18"/><path d="M5 21V10.5h14V21"/><path d="M3.5 10.5 12 5l8.5 5.5"/><path d="M9.5 21v-5.5h5V21"/>',
+ bus:'<rect x="5" y="3.5" width="14" height="14" rx="2.5"/><path d="M5 11h14"/><path d="M8 20.5v-3M16 20.5v-3"/>',
+ ferry:'<path d="M3 15.5h18l-2.8 4.5H5.8z"/><path d="M6 15.5V11h12v4.5"/><path d="M9.5 11V7.5h5V11"/>',
+ fuel:'<path d="M5 21V5a1.5 1.5 0 0 1 1.5-1.5h6A1.5 1.5 0 0 1 14 5v16"/><path d="M3.5 21h12"/><path d="M7 7h5v3.5H7z"/><path d="M14 9.5 17.5 12v5.5a1.5 1.5 0 0 0 3 0V8L18 5.5"/>',
+ parking:'<path d="M8.5 20V4.5h5a4 4 0 0 1 0 8h-5" stroke-width="2.8"/>',
+ water:'<path d="M12 3c3 4.6 6.3 7.6 6.3 11.2a6.3 6.3 0 0 1-12.6 0C5.7 10.6 9 7.6 12 3z"/>',
+ toilets:'<text x="12" y="16" text-anchor="middle" font-size="10" font-weight="700" fill="currentColor" stroke="none" font-family="system-ui,sans-serif">WC</text>',
+ viewpoint:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
+ info:'<path d="M12 10.5v7"/><path d="M12 6.5h.01" stroke-width="3.2"/>'
+};
+/* sym = {g:glyph, c:colour, s:size px, v:"badge"|"plain"} */
+const symHTML = (sym, size) => `<span class="mk ${sym.v||"badge"}" style="--c:${sym.c};--s:${size||sym.s}px"><svg viewBox="0 0 24 24" aria-hidden="true">${G[sym.g]}</svg></span>`;
+const divIcon = sym => L.divIcon({html:symHTML(sym), className:"mk-wrap", iconSize:[sym.s,sym.s], iconAnchor:[sym.s/2,sym.s/2],
+  tooltipAnchor:[sym.s/2,0], popupAnchor:[0,-sym.s/2]});
+const ICON_CACHE = {};
+const iconFor = sym => ICON_CACHE[JSON.stringify(sym)] ||= divIcon(sym);
+
+const ROAD = {1:{color:"#c4302b",weight:3},2:{color:"#e07a3c",weight:2},3:{color:"#9b8162",weight:1.4,dashArray:"4 3"}};
+const VIL = f => f.properties.capital ? {g:"house",c:"#17252c",s:24} : f.properties.top ? {g:"house",c:"#263640",s:20}
+  : f.properties.main ? {g:"house",c:"#33454f",s:17} : {g:"house",c:"#263640",s:15,v:"plain"};
+const DEF = [
+ {group:"g_places", items:[
+  {k:"villages", on:true, sym:VIL, legend:{g:"house",c:"#263640",s:18}, kind:f=>f.properties.capital?"k_capital":"k_village",
+    label:f=>({cls:f.properties.capital?"cap top":(f.properties.top?"top":(f.properties.main?"main":"minor"))})},
+  {k:"ports", on:true, sym:{g:"anchor",c:"#17647f",s:22}, kind:()=>"k_port"},
+  {k:"banks", on:false, sym:{g:"euro",c:"#2c7a57",s:19}, kind:()=>"k_bank", minZoom:12},
+  {k:"camping", on:false, sym:{g:"tent",c:"#5f8a2a",s:19}, kind:()=>"k_camping"},
+  {k:"factories", on:false, sym:{g:"factory",c:"#6d6d6d",s:19}, kind:()=>"k_factory"}
+ ]},
+ {group:"g_culture", items:[
+  {k:"monasteries", on:true, sym:{g:"church",c:"#55368a",s:22}, kind:()=>"k_monastery"},
+  {k:"churches", on:true, sym:{g:"cross",c:"#6a4a9c",s:15,v:"plain"}, kind:()=>"k_church", minZoom:12},
+  {k:"monuments", on:true, sym:{g:"temple",c:"#a3412c",s:22}, kind:()=>"k_monument"},
+  {k:"caves", on:false, sym:{g:"cave",c:"#7a5634",s:19}, kind:()=>"k_cave"}
+ ]},
+ {group:"g_coast", items:[
+  {k:"beaches", on:true, sym:{g:"umbrella",c:"#d4861a",s:19}, kind:()=>"k_beach", label:()=>({cls:"beach"})},
+  {k:"lighthouses", on:true, sym:{g:"lighthouse",c:"#b98a00",s:20}, kind:()=>"k_lighthouse"},
+  {k:"wrecks", on:false, sym:{g:"wreck",c:"#4a6270",s:19}, kind:()=>"k_wreck"},
+  {k:"coast", on:true, sw:["line","#2f6e88",1.5], line:{color:"#2f6e88",weight:1.2,opacity:.9}, noclick:true}
+ ]},
+ {group:"g_net", items:[
+  {k:"roads", on:true, sw:["roads"], line:f=>ROAD[f.properties.c]||ROAD[3]},
+  {k:"rivers", on:true, sw:["line","#2f86ba",2.2], line:{color:"#2f86ba",weight:2,opacity:.9}},
+  {k:"streams", on:false, sw:["line","#5aa2cc",1], line:{color:"#5aa2cc",weight:.8,opacity:.75}, noclick:true}
+ ]},
+ {group:"g_terrain", items:[
+  {k:"contours", on:false, sw:["line","#8a6a45",1], line:f=>({color:"#8a6a45",weight:f.properties.h%100===0?1.1:.5,opacity:f.properties.h%100===0?.8:.55}), noclick:true, minZoom:12},
+  {k:"peaks", on:false, sym:{g:"peak",c:"#3a2a1a",s:11,v:"plain"}, kind:()=>"k_peak", label:()=>({cls:"minor",txt:f=>Math.round(f.properties.h)+""})}
+ ]}
+];
+
+/* ---------- optional OpenStreetMap layers (present only when build.py was given --osm) ---------- */
+const OSM = DATA.osm || null;
+if (OSM){
+  const pois = OSM.pois.features;
+  const mk = (cat, glyph, c, s, extra={}) => {
+    const fc = {type:"FeatureCollection", features:pois.filter(f=>f.properties.cat===cat)};
+    return fc.features.length ? {k:"osm_"+cat, fc, on:extra.on ?? true, sym:{g:glyph,c,s}, kind:()=>"o_"+cat, osm:true, ...extra} : null;
+  };
+  const groups = [
+   {group:"g_health", items:[mk("hospital","hospital","#c8312b",22), mk("clinic","clinic","#c8312b",20), mk("pharmacy","pharmacy","#2e9a4a",20),
+     mk("police","police","#24508f",20), mk("fire","fire","#d4561a",20)]},
+   {group:"g_public", items:[mk("townhall","townhall","#3d6b5a",20), mk("post","post","#b07d00",19), mk("school","school","#3d6b5a",19,{on:false}),
+     mk("civic","civic","#3d6b5a",19,{on:false}), mk("atm","euro","#2c7a57",19,{on:false,minZoom:12})]},
+   {group:"g_move", items:[mk("ferry","ferry","#17647f",21), mk("bus","bus","#2f7d9a",18,{on:false,minZoom:12}), mk("fuel","fuel","#4f5a61",19),
+     mk("parking","parking","#2f6fb0",17,{on:false,minZoom:13}), mk("toilets","toilets","#5d6b72",17,{on:false,minZoom:13})]},
+   {group:"g_nature", items:[mk("water","water","#2f86ba",17,{minZoom:12}), mk("viewpoint","viewpoint","#6f7f22",19),
+     mk("museum","temple","#7d3324",19), mk("archaeo","ruins","#a3412c",19), mk("castle","castle","#8c5a2a",19), mk("info","info","#6f7f22",17,{on:false})]}
+  ].map(g => ({group:g.group, items:g.items.filter(Boolean)})).filter(g=>g.items.length);
+  DEF.splice(1, 0, ...groups);
+  const net = DEF.find(g=>g.group==="g_net").items;
+  if (OSM.trails.features.length) net.unshift({k:"trails", fc:OSM.trails, on:true, osm:true, sw:["trail"],
+    casing:{color:"#ffffff",weight:5.5,opacity:.85}, line:{color:"#8e2f6b",weight:2.6,dashArray:"7 4"}, trail:true});
+  if (OSM.paths.features.length) net.splice(1, 0, {k:"paths", fc:OSM.paths, on:true, osm:true, minZoom:13, noclick:true,
+    sw:["line","#8e2f6b",1], line:{color:"#8e2f6b",weight:1.1,dashArray:"2 3",opacity:.85}});
+}
+
+/* names */
+const nameOf = f => {
+  const p=f.properties;
+  if (p.el || p.en) return (lang==="en" ? (p.en||p.el) : (p.el||p.en));
+  if (p.h!=null) return `${Math.round(p.h)} m`;
+  return null;
+};
+const altName = f => { const p=f.properties; const o = lang==="en"? p.el : p.en; return (o && o!==nameOf(f)) ? o : null; };
+
+/* ---------------- popups ---------------- */
+function popupHTML(kindKey, title, alt, ll, extraRows=[], actions=""){
+  const h = elev(ll.lat, ll.lng);
+  const rows = [...extraRows, [t("elev"), fmtH(h)], ["φ, λ", fmtLL(ll)], ["ΕΓΣΑ87", fmtGR(ll)]];
+  const dir = `https://www.google.com/maps/dir/?api=1&destination=${ll.lat.toFixed(6)},${ll.lng.toFixed(6)}`;
+  return `<div class="pp-kind">${t(kindKey)}</div>
+    ${title?`<div class="pp-title">${esc(title)}</div>`:""}${alt?`<div class="pp-alt">${esc(alt)}</div>`:""}
+    <div class="pp-grid">${rows.map(r=>`<span>${esc(r[0])}</span><span>${esc(r[1])}</span>`).join("")}</div>
+    <div class="pp-actions">${actions}<a href="${dir}" target="_blank" rel="noopener">${t("directions")} ↗</a>
+    <button type="button" data-copy="${fmtLL(ll)} | ΕΓΣΑ87 ${fmtGR(ll)}">${t("copy")}</button></div>`;
+}
+const esc = s => String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const TRAILS = [];
+map.on("popupopen", e => {
+  const el = e.popup.getElement();
+  const b = el.querySelector("[data-copy]");
+  if (b) b.addEventListener("click", () => {
+    const txt=b.dataset.copy;
+    navigator.clipboard?.writeText(txt).then(()=>{b.textContent=t("copied")}).catch(()=>{ toast(txt, 6000); });
+  });
+  const tb = el.querySelector("[data-trail]");
+  if (tb) tb.addEventListener("click", () => loadTrail(TRAILS[+tb.dataset.trail]));
+});
+const osmLink = p => p.osm ? `<a href="https://www.openstreetmap.org/${typeof p.osm==="number"?"relation/"+p.osm:p.osm}" target="_blank" rel="noopener">OSM ↗</a>` : "";
+
+/* ---------------- build layers ---------------- */
+const LAYERS = {}, ROWS = {}, SEARCH = [];
+function buildLayer(it){
+  const fc = it.fc || DATA[it.k]; if(!fc) return;
+  it.fc = fc;
+  let lg;
+  if (it.line){
+    const style = typeof it.line==="function"? it.line : ()=>it.line;
+    const main = L.geoJSON(fc,{pane:"lines",renderer:canvas,interactive:!it.noclick, style,
+      onEachFeature:(f,l)=>{
+        if (it.noclick) return;
+        l.on("click", e => {
+          if (prof.active){ L.DomEvent.stopPropagation(e); addProfilePoint(e.latlng); readout(e.latlng); return; }
+          let kind="k_river", title=nameOf(f), alt=altName(f), extra=[], actions="";
+          if (it.k==="roads"){ kind="road"; title=t("road"+f.properties.c); alt=null; }
+          if (it.trail){
+            kind="k_trail"; const i = TRAILS.indexOf(f);
+            if (f.properties.ref) extra.push([t("ref"), f.properties.ref]);
+            extra.push([t("len"), f.properties.km.toFixed(1)+" km"]);
+            actions = `<button type="button" data-trail="${i}">${t("trailprof")}</button>` + osmLink(f.properties);
+          }
+          L.popup({maxWidth:300}).setLatLng(e.latlng).setContent(popupHTML(kind,title,alt,e.latlng,extra,actions)).openOn(map);
+          L.DomEvent.stopPropagation(e);
+        });
+      }});
+    lg = it.casing ? L.layerGroup([L.geoJSON(fc,{pane:"lines",renderer:canvas,interactive:false,style:()=>it.casing}), main]) : main;
+    if (it.trail) fc.features.forEach(f => {
+      TRAILS.push(f);
+      const c=f.geometry.coordinates[0][0];
+      SEARCH.push({f, it:{k:"trails",kind:()=>"k_trail"}, ll:L.latLng(c[1],c[0]), trail:f});
+    });
+  } else {
+    lg = L.layerGroup();
+    fc.features.forEach(f => {
+      const [lng,lat] = f.geometry.coordinates, ll=L.latLng(lat,lng);
+      const sym = typeof it.sym==="function" ? it.sym(f) : it.sym;
+      const m = L.marker(ll, {icon:iconFor(sym), keyboard:false, riseOnHover:true});
+      m.feature=f;
+      m.bindPopup(() => {
+        const p=f.properties, extra=[];
+        let title = nameOf(f);
+        if (!p.el && !p.en && p.near) title = `${t(it.kind(f))} · ${p.near}`;
+        if (p.addr) extra.push([t("addr"), p.addr]);
+        if (p.phone) extra.push([t("phone"), p.phone]);
+        if (p.hours) extra.push([t("hours"), p.hours]);
+        if (it.k==="peaks") extra.unshift([t("elev")+" (ΨΜΕ σημ.)", Math.round(p.h)+" m"]);
+        const actions = (p.web ? `<a href="${esc(p.web)}" target="_blank" rel="noopener">Web ↗</a>` : "") + osmLink(p);
+        return popupHTML(it.kind(f), title, altName(f), ll, extra, actions);
+      }, {maxWidth:290});
+      if (it.label){
+        const lab = it.label(f);
+        const txt = lab.txt ? lab.txt(f) : nameOf(f);
+        if (txt) m.bindTooltip(txt,{permanent:true,direction:"right",offset:[3,0],className:"lbl "+lab.cls});
+      }
+      lg.addLayer(m);
+      if (it.k!=="peaks" && (f.properties.el||f.properties.en)) SEARCH.push({f, it, ll, marker:m});
+    });
+  }
+  LAYERS[it.k] = {lg, it, on:it.on};
+}
+DEF.forEach(g => g.items.forEach(buildLayer));
+DATA.rivers.features.forEach(f => {
+  const c=f.geometry.coordinates, mid = (f.geometry.type==="MultiLineString"? c[0] : c);
+  const p = mid[Math.floor(mid.length/2)];
+  SEARCH.push({f, it:{k:"rivers",kind:()=>"k_river"}, ll:L.latLng(p[1],p[0])});
+});
+if (OSM){
+  map.attributionControl.addAttribution('© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors (ODbL)');
+}
+
+function refreshVisibility(){
+  const z = map.getZoom();
+  Object.values(LAYERS).forEach(L_ => {
+    const show = L_.on && (!L_.it.minZoom || z >= L_.it.minZoom);
+    if (show && !map.hasLayer(L_.lg)) L_.lg.addTo(map);
+    if (!show && map.hasLayer(L_.lg)) map.removeLayer(L_.lg);
+    const row = ROWS[L_.it.k];
+    if (row) row.classList.toggle("zoomhidden", L_.on && !!L_.it.minZoom && z < L_.it.minZoom);
+  });
+  const c = map.getContainer().classList;
+  c.toggle("z-a", z<12); c.toggle("z-b", z>=12 && z<13.5); c.toggle("z-c", z>=13.5 && z<14.5);
+}
+map.on("zoomend", refreshVisibility);
+
+/* ---------------- panel UI ---------------- */
+function swatch(it){
+  if (it.sym || it.legend){ const s = it.legend || (typeof it.sym==="function"? null : it.sym); return `<span class="sw">${symHTML(s, Math.min(18, s.s+2))}</span>`; }
+  const sw = it.sw;
+  if (sw[0]==="line") return `<span class="sw"><b style="border-top:${Math.max(1,sw[2])}px ${it.line?.dashArray?"dashed":"solid"} ${sw[1]}"></b></span>`;
+  if (sw[0]==="trail") return `<span class="sw"><b style="border-top:3px dashed #8e2f6b"></b></span>`;
+  return `<span class="sw" style="display:grid;gap:2px"><b style="border-top:3px solid #c4302b"></b><b style="border-top:2px solid #e07a3c"></b><b style="border-top:1.5px dashed #9b8162"></b></span>`;
+}
+function renderPanel(){
+  const host = document.getElementById("layers");
+  host.innerHTML = `<h2>${t("layers")}</h2>` + DEF.map(g => `<div class="grp">${t(g.group)}</div>` + g.items.map(it => {
+    const n = it.fc?.features.length ?? 0;
+    const roadsLegend = it.k==="roads" ? `<div style="grid-column:3/5;font-size:11px;color:var(--muted);margin-top:-2px">${t("road1")} · ${t("road2")} · ${t("road3")}</div>` : "";
+    return `<label class="row" id="row-${it.k}"><input type="checkbox" id="chk-${it.k}" ${LAYERS[it.k].on?"checked":""}>${swatch(it)}
+      <span class="lbl-txt">${t(it.k)} ${it.minZoom?`<span class="hint">· ${t("fromzoom")} ${it.minZoom}</span>`:""}</span><span class="n">${it.line?"":n}</span>${roadsLegend}</label>`;
+  }).join("")).join("");
+  DEF.forEach(g => g.items.forEach(it => {
+    ROWS[it.k] = document.getElementById("row-"+it.k);
+    document.getElementById("chk-"+it.k).addEventListener("change", e => { LAYERS[it.k].on = e.target.checked; refreshVisibility(); });
+  }));
+  const base = document.getElementById("base");
+  base.innerHTML = ["b_relief","b_osm","b_sat","b_topo"].map(k =>
+    `<label><input type="radio" name="base" id="base-${k}" value="${k}" ${k===baseKey?"checked":""}>${t(k)}</label>`).join("");
+  base.querySelectorAll("input").forEach(r => r.addEventListener("change", e => setBase(e.target.value)));
+  document.querySelectorAll("[data-i18n]").forEach(el => el.textContent = t(el.dataset.i18n));
+  if (OSM) document.querySelector('[data-i18n="credit"]').textContent += (lang==="en" ? ` Services, springs and trails: © OpenStreetMap contributors (ODbL), ${OSM.fetched||""}.` : ` Υπηρεσίες, πηγές, μονοπάτια: © OpenStreetMap contributors (ODbL), ${OSM.fetched||""}.`);
+  document.getElementById("q").placeholder = t("search");
+  document.getElementById("lang-el").setAttribute("aria-pressed", lang==="el");
+  document.getElementById("lang-en").setAttribute("aria-pressed", lang==="en");
+  document.documentElement.lang = lang;
+  refreshVisibility();
+}
+function relabel(){
+  Object.values(LAYERS).forEach(({lg,it}) => {
+    if (!it.label || !lg.eachLayer) return;
+    lg.eachLayer(m => { const lab=it.label(m.feature); const txt = lab.txt? lab.txt(m.feature) : nameOf(m.feature); if (txt) m.setTooltipContent(txt); });
+  });
+}
+function setLang(l){ lang=l; try{localStorage.setItem("andros-lang",l)}catch(e){} renderPanel(); relabel(); map.closePopup(); if(prof.active||prof.pts.length) drawProfile(); }
+document.getElementById("lang-el").onclick = () => setLang("el");
+document.getElementById("lang-en").onclick = () => setLang("en");
+const sheet = document.getElementById("sheet"), mt = document.getElementById("mtoggle");
+if (matchMedia("(max-width: 720px)").matches) sheet.classList.add("collapsed");
+mt.onclick = () => { const c = sheet.classList.toggle("collapsed"); mt.setAttribute("aria-expanded", !c); };
+
+/* ---------------- search ---------------- */
+const norm = s => (s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/ς/g,"σ").replace(/[.()]/g," ").replace(/\s+/g," ").trim();
+const q = document.getElementById("q"), res = document.getElementById("results");
+let hits=[], sel=-1;
+function doSearch(){
+  const s = norm(q.value);
+  if (s.length<2){ res.hidden=true; return; }
+  const scored = [];
+  SEARCH.forEach(o => {
+    const a = norm(o.f.properties.el), b = norm(o.f.properties.en);
+    let sc = -1;
+    if (a.startsWith(s)||b.startsWith(s)) sc = 0;
+    else if (a.split(" ").some(w=>w.startsWith(s))||b.split(" ").some(w=>w.startsWith(s))) sc=1;
+    else if (a.includes(s)||b.includes(s)) sc=2;
+    if (sc>=0) scored.push([sc + (o.it.k==="villages"?0:.5) + (o.it.k==="churches"?.3:0), o]);
+  });
+  scored.sort((x,y)=>x[0]-y[0]);
+  hits = scored.slice(0,10).map(x=>x[1]); sel=-1;
+  res.innerHTML = hits.length ? hits.map((o,i)=>`<li><button type="button" data-i="${i}">${esc(nameOf(o.f))}<small>${t(o.it.kind(o.f))}</small></button></li>`).join("")
+    : `<li class="empty">${t("noresults")}</li>`;
+  res.hidden=false;
+  res.querySelectorAll("button").forEach(b => b.onclick = () => pick(+b.dataset.i));
+}
+function pick(i){
+  const o = hits[i]; if(!o) return;
+  res.hidden=true; q.value = nameOf(o.f);
+  const L_ = LAYERS[o.it.k];
+  if (o.trail){ res.hidden=true; q.value=nameOf(o.f); if (L_ && !L_.on){ L_.on=true; const c=document.getElementById("chk-trails"); if(c) c.checked=true; refreshVisibility(); } loadTrail(o.trail); return; }
+  if (L_ && !L_.on){ L_.on=true; const c=document.getElementById("chk-"+o.it.k); if(c) c.checked=true; }
+  map.flyTo(o.ll, Math.max(map.getZoom(), 14), {duration:.8});
+  map.once("moveend", () => {
+    refreshVisibility();
+    if (o.marker) o.marker.openPopup();
+    else L.popup().setLatLng(o.ll).setContent(popupHTML(o.it.kind(o.f), nameOf(o.f), altName(o.f), o.ll)).openOn(map);
+  });
+  if (matchMedia("(max-width: 720px)").matches){ sheet.classList.add("collapsed"); mt.setAttribute("aria-expanded","false"); }
+}
+q.addEventListener("input", doSearch);
+q.addEventListener("keydown", e => {
+  const bs = res.querySelectorAll("button");
+  if (e.key==="ArrowDown"){ sel=Math.min(sel+1,bs.length-1); e.preventDefault(); }
+  else if (e.key==="ArrowUp"){ sel=Math.max(sel-1,0); e.preventDefault(); }
+  else if (e.key==="Enter"){ pick(sel<0?0:sel); e.preventDefault(); return; }
+  else if (e.key==="Escape"){ res.hidden=true; return; }
+  bs.forEach((b,i)=>b.classList.toggle("on",i===sel));
+});
+document.addEventListener("click", e => { if(!e.target.closest(".search")) res.hidden=true; });
+
+/* ---------------- readout + map click ---------------- */
+const roLL=document.getElementById("ro-ll"), roGR=document.getElementById("ro-gr"), roH=document.getElementById("ro-h");
+function readout(ll){ roLL.textContent=fmtLL(ll); roGR.textContent=fmtGR(ll); roH.textContent=fmtH(elev(ll.lat,ll.lng)); }
+map.on("mousemove", e => readout(e.latlng));
+map.on("click", e => {
+  readout(e.latlng);
+  if (prof.active){ addProfilePoint(e.latlng); return; }
+  L.popup().setLatLng(e.latlng).setContent(popupHTML("point", null, null, e.latlng)).openOn(map);
+});
+
+/* ---------------- profile tool ---------------- */
+const prof = {active:false, pts:[], line:null, verts:L.layerGroup().addTo(map), cursor:null, samples:[]};
+const pBtn=document.getElementById("btn-profile"), pBox=document.getElementById("profile");
+function setProfile(on){
+  prof.active=on; pBtn.setAttribute("aria-pressed",on);
+  map.getContainer().classList.toggle("drawing",on);
+  if (on){ pBox.hidden=false; map.closePopup(); drawProfile(); }
+}
+pBtn.onclick = () => setProfile(!prof.active);
+document.getElementById("p-close").onclick = () => { setProfile(false); clearProfile(); pBox.hidden=true; };
+document.getElementById("p-clear").onclick = () => { clearProfile(); drawProfile(); };
+document.getElementById("p-undo").onclick = () => { prof.pts.pop(); redrawLine(); drawProfile(); };
+function clearProfile(){ prof.pts=[]; prof.trail=null; redrawLine(); }
+function addProfilePoint(ll){ if (prof.trail){ prof.pts=[]; prof.trail=null; } prof.pts.push(ll); redrawLine(); drawProfile(); }
+function loadTrail(f){
+  if (!f) return;
+  const pts=[]; f.geometry.coordinates.forEach(part => part.forEach(c => pts.push(L.latLng(c[1],c[0]))));
+  map.closePopup(); setProfile(false); pBox.hidden=false;
+  prof.pts=pts; prof.trail=f; redrawLine(); drawProfile();
+  map.fitBounds(L.latLngBounds(pts), {padding:[40,40], paddingBottomRight:[0, pBox.offsetHeight+20]});
+}
+function redrawLine(){
+  if (prof.line){ map.removeLayer(prof.line); prof.line=null; }
+  prof.verts.clearLayers();
+  if (prof.pts.length>1) prof.line = L.polyline(prof.pts,{color:"#17647f",weight:3.5,opacity:.95,renderer:canvas,interactive:false}).addTo(map);
+  const vs = prof.pts.length>40 ? [prof.pts[0], prof.pts[prof.pts.length-1]] : prof.pts;
+  vs.forEach((p,i)=>prof.verts.addLayer(L.circleMarker(p,{renderer:canvas,radius:4.5,color:"#fff",weight:2,fillColor:i===0?"#22313a":"#17647f",fillOpacity:1,interactive:false})));
+}
+const hav = (a,b) => { const R=6371008.8, r=Math.PI/180, dφ=(b.lat-a.lat)*r, dλ=(b.lng-a.lng)*r;
+  const x=Math.sin(dφ/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dλ/2)**2; return 2*R*Math.asin(Math.sqrt(x)); };
+function sample(){
+  const out=[]; let total=0;
+  const segs = []; for (let i=1;i<prof.pts.length;i++){ const d=hav(prof.pts[i-1],prof.pts[i]); segs.push(d); total+=d; }
+  const step = Math.max(10, total/500);
+  let acc=0;
+  segs.forEach((d,i) => {
+    const a=prof.pts[i], b=prof.pts[i+1], n=Math.max(1,Math.ceil(d/step));
+    for (let k=(i===0?0:1); k<=n; k++){
+      const f=k/n, ll=L.latLng(a.lat+(b.lat-a.lat)*f, a.lng+(b.lng-a.lng)*f);
+      out.push({d:acc+d*f, h:Math.max(0,elev(ll.lat,ll.lng)||0), ll});
+    }
+    acc+=d;
+  });
+  return {out,total};
+}
+const niceStep = (range, target) => { const raw=range/target, p=10**Math.floor(Math.log10(raw)); return [1,2,2.5,5,10].map(m=>m*p).find(s=>s>=raw); };
+function drawProfile(){
+  const svg=document.getElementById("chart"), stats=document.getElementById("pstats"), hint=document.getElementById("phint");
+  if (prof.pts.length<2){ svg.innerHTML=""; stats.innerHTML=""; hint.hidden=false; svg.style.display="none"; return; }
+  hint.hidden=true; svg.style.display="block";
+  const {out,total}=sample(); prof.samples=out;
+  let up=0, down=0; for (let i=1;i<out.length;i++){ const dh=out[i].h-out[i-1].h; if(dh>0) up+=dh; else down-=dh; }
+  const hs=out.map(o=>o.h), hmin=Math.min(...hs), hmax=Math.max(...hs);
+  const km = total>=1000 ? (total/1000).toFixed(2)+" km" : Math.round(total)+" m";
+  document.querySelector("#profile h3").textContent = prof.trail ? nameOf(prof.trail) : t("ptitle");
+  stats.innerHTML = `<span><b>${t("len")}</b>${km}</span><span><b>${t("up")}</b>+${Math.round(up)} m</span><span><b>${t("down")}</b>−${Math.round(down)} m</span><span><b>${t("min")}</b>${Math.round(hmin)} m</span><span><b>${t("max")}</b>${Math.round(hmax)} m</span>`;
+  const W=svg.clientWidth||600, H=svg.clientHeight||150, ml=44, mr=12, mt=8, mb=20;
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  const ys = niceStep(Math.max(20,hmax-hmin),4), y0=Math.floor(hmin/ys)*ys, y1=Math.ceil(hmax/ys)*ys || ys;
+  const xs = niceStep(total,6);
+  const X = d => ml + d/total*(W-ml-mr), Y = h => mt + (1-(h-y0)/(y1-y0))*(H-mt-mb);
+  let g="";
+  for (let h=y0; h<=y1+1e-6; h+=ys) g+=`<line class="grid" x1="${ml}" x2="${W-mr}" y1="${Y(h)}" y2="${Y(h)}"/><text x="${ml-6}" y="${Y(h)+3}" text-anchor="end">${Math.round(h)}</text>`;
+  for (let d=0; d<=total+1e-6; d+=xs){ const lab = total>=2000? (d/1000).toFixed(xs<1000?1:0)+" km" : Math.round(d)+" m";
+    g+=`<text x="${X(d)}" y="${H-5}" text-anchor="${d===0?"start":"middle"}">${lab}</text>`; }
+  const path = out.map((o,i)=>`${i?"L":"M"}${X(o.d).toFixed(1)},${Y(o.h).toFixed(1)}`).join("");
+  svg.innerHTML = g + `<path class="area" d="${path}L${X(total)},${Y(y0)}L${X(0)},${Y(y0)}Z"/><path class="ln" d="${path}"/><line class="cur" id="cur" y1="${mt}" y2="${H-mb}" x1="-10" x2="-10"/>`;
+  svg.onmousemove = e => {
+    const r=svg.getBoundingClientRect(), x=(e.clientX-r.left)*(W/r.width), d=(x-ml)/(W-ml-mr)*total;
+    if (d<0||d>total) return;
+    let best=out[0]; for (const o of out) if (Math.abs(o.d-d)<Math.abs(best.d-d)) best=o;
+    const c=svg.querySelector("#cur"); c.setAttribute("x1",X(best.d)); c.setAttribute("x2",X(best.d));
+    if (!prof.cursor) prof.cursor=L.circleMarker(best.ll,{renderer:canvas,radius:6,color:"#fff",weight:2,fillColor:"#c4302b",fillOpacity:1,interactive:false}).addTo(map);
+    prof.cursor.setLatLng(best.ll).bindTooltip(`${Math.round(best.h)} m`,{permanent:true,direction:"top",className:"tip",offset:[0,-6]}).openTooltip();
+  };
+  svg.onmouseleave = () => { if(prof.cursor){ map.removeLayer(prof.cursor); prof.cursor=null; } };
+}
+addEventListener("resize", () => { if(!pBox.hidden) drawProfile(); });
+
+/* ---------------- locate + goto ---------------- */
+let meMarker=null;
+document.getElementById("btn-locate").onclick = () => {
+  if (!navigator.geolocation){ toast(t("geo_err"),6000); return; }
+  navigator.geolocation.getCurrentPosition(p => {
+    const ll=L.latLng(p.coords.latitude,p.coords.longitude);
+    if (meMarker) map.removeLayer(meMarker);
+    meMarker=L.circleMarker(ll,{radius:8,color:"#fff",weight:3,fillColor:"#1a73e8",fillOpacity:1}).addTo(map)
+      .bindPopup(()=>popupHTML("you",null,null,ll));
+    map.flyTo(ll,15);
+  }, () => toast(t("geo_err"),6000), {enableHighAccuracy:true,timeout:8000});
+};
+let gotoMarker=null;
+document.getElementById("goto").addEventListener("submit", e => {
+  e.preventDefault();
+  const nums = (document.getElementById("goto-in").value.match(/-?\d+(?:[.,]\d+)?/g)||[]).map(s=>parseFloat(s.replace(",",".")));
+  if (nums.length<2){ toast(t("bad_coords"),5000); return; }
+  let [a,b]=nums, ll;
+  if (a>1000 && b>1000) ll = fromGR(Math.min(a,b), Math.max(a,b));   // ΕΓΣΑ87: X ~ 5xx xxx, Y ~ 41xx xxx
+  else if (Math.abs(a)<=90 && Math.abs(b)<=180) ll = (a>30 && b<30) ? L.latLng(a,b) : L.latLng(b,a);
+  if (!ll || !isFinite(ll.lat)){ toast(t("bad_coords"),5000); return; }
+  if (gotoMarker) map.removeLayer(gotoMarker);
+  gotoMarker = L.circleMarker(ll,{radius:7,color:"#fff",weight:2.5,fillColor:"#c4302b",fillOpacity:1}).addTo(map)
+    .bindPopup(()=>popupHTML("point",null,null,ll));
+  map.flyTo(ll, Math.max(map.getZoom(),14), {duration:.8});
+  map.once("moveend", () => gotoMarker.openPopup());
+});
+
+/* ---------------- toast ---------------- */
+let toastT=null;
+function toast(msg,ms=4000){ const el=document.getElementById("toast"); el.textContent=msg; el.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>el.hidden=true,ms); }
+
+/* ---------------- start ---------------- */
+const wide = matchMedia("(min-width: 721px)").matches;
+map.fitBounds(islandBounds.pad(-0.08), wide ? {paddingTopLeft:[340,0]} : {paddingBottomRight:[0,150],paddingTopLeft:[0,60]});
+renderPanel();
+readout(islandBounds.getCenter());
+})();
+</script>
