@@ -477,7 +477,7 @@ if (OSM){
   DEF.splice(1, 0, ...groups);
   const net = DEF.find(g=>g.group==="g_net").items;
   if (OSM.trails.features.length) net.unshift({k:"trails", fc:OSM.trails, on:true, osm:true, sw:["trail"],
-    casing:{color:"#ffffff",weight:5.5,opacity:.85}, line:{color:"#8e2f6b",weight:2.6,dashArray:"7 4"}, trail:true});
+    casing:{color:"#ffffff",weight:6,opacity:.75}, line:{color:"#a3266f",weight:3,dashArray:"8 4"}, trail:true});
   if (OSM.paths.features.length) net.splice(1, 0, {k:"paths", fc:OSM.paths, on:true, osm:true, minZoom:13, noclick:true,
     sw:["line","#8e2f6b",1], line:{color:"#8e2f6b",weight:1.1,dashArray:"2 3",opacity:.85}});
 }
@@ -524,9 +524,11 @@ function buildLayer(it){
   let lg;
   if (it.line){
     const style = typeof it.line==="function"? it.line : ()=>it.line;
+    const casing = it.casing ? L.geoJSON(fc,{pane:"lines",renderer:canvas,interactive:false,style:()=>it.casing}) : null;  // created first so it draws underneath
     const main = L.geoJSON(fc,{pane:"lines",renderer:canvas,interactive:!it.noclick, style,
       onEachFeature:(f,l)=>{
         if (it.noclick) return;
+        if (it.trail) l.bindTooltip(() => `${esc(nameOf(f))} · ${f.properties.km.toFixed(1)} km`, {sticky:true, className:"tip"});
         l.on("click", e => {
           if (prof.active){ L.DomEvent.stopPropagation(e); addProfilePoint(e.latlng); readout(e.latlng); return; }
           let kind="k_river", title=nameOf(f), alt=altName(f), extra=[], actions="";
@@ -541,7 +543,7 @@ function buildLayer(it){
           L.DomEvent.stopPropagation(e);
         });
       }});
-    lg = it.casing ? L.layerGroup([L.geoJSON(fc,{pane:"lines",renderer:canvas,interactive:false,style:()=>it.casing}), main]) : main;
+    lg = casing ? L.layerGroup([casing, main]) : main;
     if (it.trail) fc.features.forEach(f => {
       TRAILS.push(f);
       const c=f.geometry.coordinates[0][0];
