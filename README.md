@@ -30,6 +30,15 @@ python fetch_osm.py                      # writes osm_andros.json
 python build.py --data data --osm osm_andros.json --out index.html
 ```
 
+### If `fetch_osm.py` keeps failing
+
+The public Overpass servers are sometimes overloaded. You can download the same data in a browser instead:
+
+1. Open <https://overpass-turbo.eu>.
+2. Paste each query from `PARTS` in `fetch_osm.py` (one at a time) and press **Run**.
+3. Choose **Export → raw OSM data** and save the file.
+4. Send the saved files over to be merged, or run the script again later.
+
 `build.py` expects the original project data in `data/`:
 
 ```
@@ -57,15 +66,18 @@ The online basemaps (OpenStreetMap, satellite, OpenTopoMap) and "My location" ne
 ## Data and licences
 
 - **Code**: MIT, see `LICENSE`.
-- **Base cartographic data** (1:50k / 1:150k layers, DTM, hillshade): prepared for the NTUA MSc Geoinformatics course *Επεξεργασία, Ανάλυση και Απόδοση Χωρικών Δεδομένων* (2019). The raw data is **not** included in this repository. The map is published with the permission of the providers. *(Update this line once permission is confirmed.)*
+- **Base vector layers** (1:50k / 1:150k): from the Andros teaching dataset used on the NTUA MSc in Geoinformatics. The ArcGIS processing history in each layer shows it was digitised and compiled between 2008 and 2012, before this project. It was used for the 2019 course *Επεξεργασία, Ανάλυση και Απόδοση Χωρικών Δεδομένων*. The raw data is **not** included in this repository.
+- **Added by the author (2019)**: the banks layer, the generalisation to 1:150,000, and the cartographic design and symbology. *[Add the DTM and hillshade here if you produced them.]*
 - **OpenStreetMap layers**: © OpenStreetMap contributors, available under the [Open Database Licence](https://www.openstreetmap.org/copyright).
 - This map is not an official map of the Municipality of Andros.
 
-## Assumptions to check
+## Feature categories
 
-- Road class codes: 1 = provincial, 2 = municipal, 3 = rural.
-- Religious buildings `Type`: 1 = monastery, 2 = church.
-- Monument subtypes (`Είδος` 1/2/3) are not shown, because their meaning isn't documented.
+The original ArcGIS project kept categories as integer codes, with their meanings defined in the project's symbology and GeoServer SLD styles rather than in the shapefiles. The build decodes them as:
+
+- **Roads** (`Eίδος`): 1 = national road (εθνική οδός), 2 = provincial road (επαρχιακή οδός), 3 = rural road (αγροτική οδός). From `roads.sld`.
+- **Religious buildings** (`Type`): 1 = monastery, 2 = church.
+- **Monuments** (`Είδος` 1/2/3): shown as one category, because none of the included style files define the subtypes.
 
 ---
 

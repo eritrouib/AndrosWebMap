@@ -1,0 +1,42 @@
+---
+title: "From GeoServer to a single HTML file: rebuilding my Andros map, seven years on"
+description: "A 2019 MSc cartography project on Andros, rebuilt in Python as a web map a small island municipality could actually host."
+date: 2026-10-18
+categories: [cartography, web mapping, Python, AI]
+image: screenshot-island.png
+---
+
+In February 2019 I made a set of maps of Andros for the MSc in Geoinformatics at NTUA. The brief covered generalisation, multi-scale databases and proper cartographic projection. The output was two printed 1:150,000 maps, one with contours and one with hypsometric tints and hillshading, plus a web version served through GeoServer with OpenLayers on top.
+
+The GeoServer version did its job for the course. It also needed a running map server, SLD styling for every layer and someone to keep it alive. Nobody on a small island is going to do that.
+
+![The rebuilt map: relief from the 13 m DTM, settlements, beaches, churches and the road network](screenshot-island.png)
+
+## What the island has now
+
+Before rebuilding anything, I checked what the Municipality of Andros already publishes. It has two maps, a political map and a beach map, and both are static JPG images. The good interactive maps of the island come from elsewhere. [Andros Routes](https://www.androsroutes.gr/), a non-profit, maintains the trail network. Commercial publishers sell hiking maps. So a public, practical map that uses the coordinate system the council's own engineers work in (ΕΓΣΑ87) is still missing.
+
+## The rebuild
+
+The new version is one Python script and one HTML file:
+
+- **GeoPandas** reads the original 1:50,000 shapefiles in ΕΓΣΑ87, reprojects them to WGS84 and simplifies them. The 1:150,000 generalised settlements from the original project now decide which village names show when you're zoomed out, so the multi-scale work from 2019 still has a job.
+- **rasterio** blends the 13 m DTM and hillshade into a relief image and warps it to Web Mercator. Because of this the map needs no tile server at all.
+- The DTM is also resampled into a small elevation grid inside the page. Click anywhere and you get the elevation plus coordinates in both WGS84 and ΕΓΣΑ87. Draw a line and you get an **elevation profile** with distance, ascent and descent.
+- **Leaflet** handles the map. Search ignores Greek accents, the interface switches between Greek and English, and every feature type has its own symbol.
+
+![Elevation profile from Chora across the island's central ridge](screenshot-profile.png)
+
+The data that came with the course stops at what a topographic map shows. To make the map useful for day-to-day council work, the build can also pull in **OpenStreetMap** data under its open licence: health centres, pharmacies, police and fire stations, municipal offices, fuel, bus stops, springs, viewpoints and the waymarked trails. Each trail opens its own elevation profile in one click.
+
+## Working with an AI collaborator
+
+As with the [London pedestrian analysis](../2026-10-athens-to-london/), I built this with Claude as a collaborator. It unpacked the original RAR archives, read my 2019 PDFs to recover the legend, checked the council's website and wrote most of the build script and the page. My job was the part that needs a cartographer: deciding what the map is for, checking the symbology against the original legend, and catching what was wrong. One example: the shapefiles store categories as bare codes (road class 1, 2, 3), with the meanings kept in the ArcGIS symbology. Claude first guessed the road classes and got two of the three wrong. The correct definitions were in the old GeoServer style files: national, provincial and rural roads. The AI can read every file, but someone who knows how the project was built still has to check what it concludes.
+
+## What's next
+
+I've asked NTUA for permission to publish the map built from their data. If they agree, I'll offer it to the Municipality of Andros as a starting point. The single-file format means they can drop it into their existing Joomla site with one iframe.
+
+**Map:** [etymo.co.uk/AndrosWebMap](https://etymo.co.uk/AndrosWebMap/) · **Code:** [github.com/eritrouib/AndrosWebMap](https://github.com/eritrouib/AndrosWebMap)
+
+@ET
